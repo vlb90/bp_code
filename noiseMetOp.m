@@ -4,34 +4,26 @@ function [uZverevBP, y, sci] = noiseMetOp(data, mode, gg)
     
     % Directories
     
-    figFolder = fullfile(data.dirSave, 'figs'); %mac
-    
-    %figFolder = 'C:\Users\vlb\Dropbox\Doutorado\Research\backpropagation\carrano\bp_w_noise\figs\noise\'; %win
+    figFolder = fullfile(data.dirSave, 'figs');
 
     srcPath = strsplit(data.simFile, '\');
     
     figName = strrep(srcPath{end}, 'sim_', 'noise_');
     
     % Model SNR (including antenna pattern attenuation)
-    % Riccardo's presentation (mid-latitude)
     
+    % Riccardo's presentation (mid-latitude)
     slta_ref = [10 100 200 300 400 500 600].*1e3;
  
     snr_ref = [710 700 670 590 500 400 290].*1; % original in manuscript
-
-%     snr_ref = 1000.*ones(1,length(slta_ref)); % flat SNR (without antenna radiation issue)
     
     fsWOP = round(3.2e3/mean(diff(data.Y))); % Sampling frequency on PS
     
     fsMeas  = 1;                             % Sampling freq. receiver/data   
     
-    % GRAS_1B_M02_20200801020319Z_20200801020926Z_N_T_20210507122630Z_G29_NN.nc
-    
     if strcmp(mode, 'meas')
-    
-        %load('C:\Users\vlb\Dropbox\Doutorado\Research\backpropagation\carrano\ref_GRAS_1B_M02_20200801020319Z_20200801020926Z_N_T_20210507122630Z_G29_NN.mat'); %win
 
-        load('/Users/vlb/Dropbox/Doutorado/Research/backpropagation/carrano/ref_GRAS_1B_M02_20200801020319Z_20200801020926Z_N_T_20210507122630Z_G29_NN.mat');
+        load('/Users/vlb/Dropbox/Doutorado/Research/backpropagation/carrano/ref_GRAS_1B_M02_20200801020319Z_20200801020926Z_N_T_20210507122630Z_G29_NN.mat'); % ref occultation
     
         slta_ref = slta;
     
@@ -81,7 +73,7 @@ function [uZverevBP, y, sci] = noiseMetOp(data, mode, gg)
 
     slta_full = m./(sqrt(1+k.^2))-data.Re;
     
-    ix = 1:length(slta_full); %slta_full >= 80e3 & slta_full<=920e3;
+    ix = 1:length(slta_full); %slta_full / alternative (interval): 80e3 & slta_full<=920e3;
     
     slta = slta_full(ix);
     
@@ -124,32 +116,22 @@ function [uZverevBP, y, sci] = noiseMetOp(data, mode, gg)
         end
             
     end
-    
-    plot(slta, filtered_u_sq, 'r--');
+
+    plot(slta, filtered_u_sq, 'r', 'LineWidth', 1.2);
     
     close all;
     
-    [~, ih] = max(snr_filtered);
-    
-    iBelow = slta./1e3 <= slta_ref(ih)./1e3;
-    
-    iEnd = find(slta < max(slta_ref), 1, 'last');
-    
-    iAbove = slta(1:iEnd)./1e3 > slta_ref(ih)./1e3;
-    
-    iExtra = slta./1e3 > max(slta_ref)./1e3;
-    
-    [~, ihMax] = max(slta_ref);
+    [~, ih] = max(snr_filtered); % index for max SNR
 
-    snr_interpolated(iBelow) = max(snr_filtered); % snr_ref
+    slta_lowres = [slta(1); slta_ref(ih:end); slta(end)];
 
-    snr_interpolated(iAbove) = interp1(slta_ref, snr_filtered, slta(iAbove)); % snr_ref
+    snr_lowres = [snr_filtered(ih); snr_filtered(ih:end); snr_filtered(end)];
+
+    snr_interpolated = interp1(slta_lowres, snr_lowres, slta);
+
+    filtered_u_sq_reshape = (snr_interpolated./max(snr_interpolated)).^2.*filtered_u_sq; % Correction given the antenna pattern
     
-    snr_interpolated(iExtra) = snr_filtered(ihMax); % snr_ref
-    
-    sigma_0 = sqrt((abs(filtered_u_sq(:))./(snr_interpolated(:).^2))*(fsWOP/fsMeas));
-    
-% % % %     sigma_0 = zeros(length(snr_interpolated),1);
+    sigma_0 = sqrt((abs(filtered_u_sq_reshape(:))./(snr_interpolated(:).^2))*(fsWOP/fsMeas));
 
     if ~isnan(gg)
         
@@ -245,20 +227,15 @@ function [uZverevBP, y, sci] = noiseMetOp(data, mode, gg)
     
     xlim([0.4 1.4])
     
-%     t = datetime('now');
-%     
-%     t.Format = 'yyyy-MM-dd''T''HH_mm_ss';
-    
     set(gcf, 'Position', [445.4000  426.2000  314.8000  420.0000]);
-    
-    fullName = strrep(fullfile(figFolder, figName), '.mat', ['_proc' data.date '.png']);
+
+    fullName = strrep(fullfile(figFolder, figName), '.mat', ['_proc' data.date '.mat']);
     
     save(fullName, 'slta_int', 'sigma_0_int');
     
-    figName = strrep(figName, '.mat', ['_proc' data.date '.png']);
+    figName = strrep(fullName, '.mat', '.png');
     
-    %saveas(gcf, fullfile(figFolder, figName), 'png'); %uncomment to save
-    %noise figure
+    saveas(gcf, figName, 'png'); %uncomment to save signal+noise figure
     
     close all;
    
